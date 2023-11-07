@@ -7,38 +7,62 @@ import pandas as pd
 # Константа для тестирования
 TEST_PAGES = 10  # установите значение 0 для обработки всех страниц
 
+# Время начала работы скрипта
+start_time = time.time()
+
+def format_elapsed_time(seconds):
+    """Форматирует прошедшее время в удобный вид."""
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{int(hours)} часов {int(minutes)} минут {int(seconds)} секунд"
+    elif minutes:
+        return f"{int(minutes)} минут {int(seconds)} секунд"
+    else:
+        return f"{int(seconds)} секунд"
+
 def parse_detail_page(url):
     time.sleep(random.uniform(2, 4))  # задержка перед каждым запросом
     response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
     soup = BeautifulSoup(response.content, 'html.parser')
 
+    # Извлекаем регион и город
+    breadcrumbs = soup.find('ul', class_='breadCrumbs').find_all('li')
+    region = ''
+    city = ''
+    if len(breadcrumbs) >= 5:  # Убедимся, что есть достаточно элементов
+        region = breadcrumbs[2].text
+        city = breadcrumbs[3].text
+
     # Извлекаем название завода
-    name = soup.find('a', class_='factory__title').text
+    name = soup.find('h1').text
+    current_time = time.time()
+    elapsed_time = format_elapsed_time(current_time - start_time)
+    print(f'Парсим завод {name}... Прошло времени: {elapsed_time}')
 
     # Извлекаем контактные данные
     contacts = soup.find('div', id='contact-company').find_all('li')
-    phone = ''
+    phone_numbers = []
     email = ''
     website = ''
     for contact in contacts:
         title = contact.find('span', class_='content-list__title').text
         if 'Телефон' in title:
-            phone = contact.find('span', class_='content-list__descr').text
+            phone_divs = contact.find_all('div')
+            for div in phone_divs:
+                phone_number = div.find('a').text.strip()
+                phone_numbers.append(phone_number)
         elif 'Эл. почта' in title:
             email = contact.find('a')['href'].replace('mailto:', '')
         elif 'Сайт' in title:
             website = contact.find('a')['href']
-
-    # Извлекаем регион
-    try:
-        region = soup.find('ul', class_='factory__category').find_all('li')[0].text
-    except (AttributeError, IndexError):
-        region = ''
+    phone = ', '.join(phone_numbers)
 
     # Формируем и возвращаем словарь с данными
     return {
         'Название': name,
         'Телефон': phone,
+        'Город': city,
         'Регион': region,
         'Email': email,
         'Сайт': website,
@@ -74,8 +98,10 @@ def parse_all_pages(base_url, pages):
     all_data = []
     max_pages = TEST_PAGES if TEST_PAGES > 0 else pages
     for page in range(1, max_pages + 1):
+        current_time = time.time()
+        elapsed_time = format_elapsed_time(current_time - start_time)
         url = f'{base_url}?page={page}'
-        print(f'Parsing page {page}... {url}')
+        print(f'Парсим ссылки на заводы из страницы {page}... {url} Прошло времени: {elapsed_time}')
         try:
             all_data.extend(parse_page(url))
         except Exception as err:
